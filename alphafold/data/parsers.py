@@ -19,19 +19,11 @@ import itertools
 import re
 import string
 from absl import logging
-#import Levenshtein
 from Bio import pairwise2
 from Bio.pairwise2 import format_alignment
 from Bio import AlignIO
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Set
 from scipy.stats import linregress
-#import biotite
-#import biotite.sequence as seq
-#import biotite.sequence.align as align
-#from biotite.sequence.align.alignment import score
-#import biotite.sequence.io.fasta as fasta
-#import biotite.database.entrez as entrez
-#import biotite.sequence.graphics as graphics
 
 DeletionMatrix = Sequence[Sequence[int]]
 
@@ -115,7 +107,7 @@ def compute_identity(input_seq,aligned_sequence):
     the aligned sequence.
   """
   matches = len([i for i in aligned_sequence if i != '-'])
-  return (matches/len(input_seq))*100
+  return (matches/len(input_seq).replace('-',''))*100
 
 def parse_stockholm(stockholm_string: str, remove_seqs: bool, identity: int) -> Msa:
   """Parses sequences and deletion matrix from stockholm format alignment.
