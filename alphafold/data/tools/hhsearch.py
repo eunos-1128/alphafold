@@ -101,7 +101,8 @@ class HHSearch:
 
   def get_template_hits(self,
                         output_string: str,
-                        input_sequence: str) -> Sequence[parsers.TemplateHit]:
+                        identity: int,
+                        remove_templates: bool)-> Sequence[parsers.TemplateHit]:
     """Gets parsed template hits from the raw string output by the tool."""
     del input_sequence  # Used by hmmseach but not needed for hhsearch.
-    return parsers.parse_hhr(output_string)
+    return parsers.parse_hhr(output_string, identity, remove_templates)
