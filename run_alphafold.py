@@ -42,8 +42,6 @@ from Bio.pairwise2 import format_alignment
 from Bio import AlignIO
 import numpy as np
 import pandas as pd
-import Bio
-from Bio import SeqIO
 
 from alphafold.model import data
 # Internal import (7716).
@@ -139,54 +137,6 @@ RELAX_EXCLUDE_RESIDUES = []
 RELAX_MAX_OUTER_ITERATIONS = 3
 
 
-def compute_identity(aligned_sequence):
-  '''
-  input_seq= input_seq.replace('-','').upper()
-  seq = seq.replace('-','').upper()
-  alignment = pairwise2.align.globalxx(input_seq, seq)
-  seq_length = min(len(input_seq), len(seq))
-  matches = alignment[0][2]
-  percent_match = (matches / seq_length) * 100
-  return percent_match'''
-  matches = len([i for i in aligned_sequence if i != '-'])
-  return (matches/len(aligned_sequence))*100
-
-def remove_msa_for_template_aligned_regions(feature_dict):
-    logging.info('Modifying feature dict.')
-    ID_TO_HHBLITS_AA = {
-        0: 'A',
-        1: 'C',  # Also U.
-        2: 'D',  # Also B.
-        3: 'E',  # Also Z.
-        4: 'F',
-        5: 'G',
-        6: 'H',
-        7: 'I',
-        8: 'K',
-        9: 'L',
-        10: 'M',
-        11: 'N',
-        12: 'P',
-        13: 'Q',
-        14: 'R',
-        15: 'S',
-        16: 'T',
-        17: 'V',
-        18: 'W',
-        19: 'Y',
-        20: 'X',  # Includes J and O.
-        21: '-',
-    }
-    for seq_id,seq in enumerate(feature_dict['msa']):
-        list_aa = [ID_TO_HHBLITS_AA[i] for i in seq]
-        aligned_sequence = ''.join([str(e) for e in list_aa])
-        similarity = compute_identity(aligned_sequence)
-        if similarity > int(FLAGS.identity):
-            feature_dict['deletion_matrix_int'][seq_id] = 0
-            feature_dict['msa'][seq_id] = 21
-    return feature_dict
-
-
 def _check_flag(flag_name: str,
                 other_flag_name: str,
                 should_be_set: bool):
@@ -239,7 +189,6 @@ def predict_structure(
         remove_templates=FLAGS.remove_templates
     )
   timings['features'] = time.time() - t_0
-  #feature_dict = remove_msa_for_template_aligned_regions(feature_dict)
   # Write out features as a pickled dictionary.
   features_output_path = os.path.join(output_dir, 'features.pkl')
   with open(features_output_path, 'wb') as f:
