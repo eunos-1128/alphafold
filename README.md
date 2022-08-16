@@ -1,5 +1,8 @@
 ![header](imgs/header.jpg)
 
+Custom version of AlphaFold2 to remove raw MSA data and/or templates above an identity threshold.
+
+
 # AlphaFold
 
 This package provides an implementation of the inference pipeline of AlphaFold
