@@ -19,11 +19,19 @@ import itertools
 import re
 import string
 from absl import logging
+#import Levenshtein
 from Bio import pairwise2
 from Bio.pairwise2 import format_alignment
 from Bio import AlignIO
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Set
 from scipy.stats import linregress
+#import biotite
+#import biotite.sequence as seq
+#import biotite.sequence.align as align
+#from biotite.sequence.align.alignment import score
+#import biotite.sequence.io.fasta as fasta
+#import biotite.database.entrez as entrez
+#import biotite.sequence.graphics as graphics
 
 DeletionMatrix = Sequence[Sequence[int]]
 
@@ -107,7 +115,7 @@ def compute_identity(input_seq,aligned_sequence):
     the aligned sequence.
   """
   matches = len([i for i in aligned_sequence if i != '-'])
-  return (matches/len(input_seq).replace('-',''))*100
+  return (matches/len(input_seq.replace('-','')))*100
 
 def parse_stockholm(stockholm_string: str, remove_seqs: bool, identity: int) -> Msa:
   """Parses sequences and deletion matrix from stockholm format alignment.
@@ -223,9 +231,8 @@ def parse_a3m(a3m_string: str, remove_seqs: bool, identity: int) -> Msa:
       if index == 0:
         input_seq = msa_sequence
       else:
-        ratio = compute_identity(input_seq, msa_sequence)
-        logging.info('A3M: Identity between query and sequence is %d', ratio)
-        if ratio > identity:
+        identity_perc = compute_identity(input_seq, msa_sequence)
+        if identity_perc > identity:
               to_del.append(index)
               continue
       deletion_vec = []
@@ -558,7 +565,7 @@ def _parse_hhr_hit(detailed_lines: Sequence[str]) -> TemplateHit:
   )
 
 
-def parse_hhr(hhr_string: str, identity: int, remove_templates: bool) -> Sequence[TemplateHit]:
+def parse_hhr(hhr_string: str, identity: int, remove_templates: bool, remove_all: bool) -> Sequence[TemplateHit]:
   """Parses the content of an entire HHR file."""
   lines = hhr_string.splitlines()
 
@@ -572,7 +579,7 @@ def parse_hhr(hhr_string: str, identity: int, remove_templates: bool) -> Sequenc
   if block_starts:
     block_starts.append(len(lines))  # Add the end of the final block.
     for i in range(len(block_starts) - 1):
-      if remove_templates:
+      if remove_templates or remove_all:
         pattern = (
           'Probab=(.*)[\t ]*E-value=(.*)[\t ]*Score=(.*)[\t ]*Aligned_cols=(.*)[\t'
           ' ]*Identities=(.*)%[\t ]*Similarity=(.*)[\t ]*Sum_probs=(.*)[\t '
