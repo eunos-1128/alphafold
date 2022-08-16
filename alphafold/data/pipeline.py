@@ -119,8 +119,6 @@ class DataPipeline:
                template_featurizer: templates.TemplateHitFeaturizer,
                use_small_bfd: bool,
                identity: int,
-               max_identity_seqs: int,
-               limit_seqs: bool,
                mgnify_max_hits: int = 501,
                uniref_max_hits: int = 10000,
                remove_seqs: bool = False,
@@ -149,9 +147,8 @@ class DataPipeline:
     self.uniref_max_hits = uniref_max_hits
     self.use_precomputed_msas = use_precomputed_msas
 
-  def process(self, input_fasta_path: str, msa_output_dir: str, identity: int, remove_seqs: bool, remove_all: bool,remove_templates: bool, max_identity_seqs: int, limit_seqs: bool ) -> FeatureDict:
+  def process(self, input_fasta_path: str, msa_output_dir: str, identity: int, remove_seqs: bool, remove_all: bool,remove_templates: bool) -> FeatureDict:
     """Runs alignment tools on the input sequence and creates features."""
-    truncated=True
     with open(input_fasta_path) as f:
       input_fasta_str = f.read()
     input_seqs, input_descs = parsers.parse_fasta(input_fasta_str)
@@ -193,13 +190,18 @@ class DataPipeline:
     with open(pdb_hits_out_path, 'w') as f:
       f.write(pdb_templates_result)
 
-    uniref90_msa = parsers.parse_stockholm(jackhmmer_uniref90_result['sto'], remove_seqs=True, identity=identity)
+    if remove_all or remove_seqs:
+        uniref90_msa = parsers.parse_stockholm(jackhmmer_uniref90_result['sto'], remove_seqs=True, identity=identity)
+        mgnify_msa = parsers.parse_stockholm(jackhmmer_mgnify_result['sto'], remove_seqs=True, identity=identity)
+    else:
+        uniref90_msa = parsers.parse_stockholm(jackhmmer_uniref90_result['sto'], remove_seqs=False, identity=identity)
+        mgnify_msa = parsers.parse_stockholm(jackhmmer_mgnify_result['sto'], remove_seqs=False, identity=identity)
+
     uniref90_msa = uniref90_msa.truncate(max_seqs=self.uniref_max_hits)
-    mgnify_msa = parsers.parse_stockholm(jackhmmer_mgnify_result['sto'], remove_seqs=True, identity=identity)
     mgnify_msa = mgnify_msa.truncate(max_seqs=self.mgnify_max_hits)
 
     pdb_template_hits = self.template_searcher.get_template_hits(
-        output_string=pdb_templates_result, input_sequence=input_sequence, identity=identity, remove_templates=remove_templates)
+        output_string=pdb_templates_result, input_sequence=input_sequence, identity=identity, remove_templates=remove_templates, remove_all=remove_all)
 
     if self._use_small_bfd:
 
