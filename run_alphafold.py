@@ -14,6 +14,7 @@
 
 """Full AlphaFold protein structure prediction script."""
 import json
+import glob
 import os
 import pathlib
 import pickle
@@ -34,11 +35,17 @@ from alphafold.data import templates
 from alphafold.data.tools import hhsearch
 from alphafold.data.tools import hmmsearch
 from alphafold.model import config
-from alphafold.model import data
 from alphafold.model import model
 from alphafold.relax import relax
+from Bio import pairwise2
+from Bio.pairwise2 import format_alignment
+from Bio import AlignIO
 import numpy as np
+import pandas as pd
+import Bio
+from Bio import SeqIO
 
+from alphafold.model import data
 # Internal import (7716).
 
 logging.set_verbosity(logging.INFO)
@@ -114,21 +121,13 @@ flags.DEFINE_integer('random_seed', None, 'The random seed for the data '
                      'deterministic, because processes like GPU inference are '
                      'nondeterministic.')
 flags.DEFINE_boolean('use_precomputed_msas', False, 'Whether to read MSAs that '
-                     'have been written to disk instead of running the MSA '
-                     'tools. The MSA files are looked up in the output '
-                     'directory, so it must stay the same between multiple '
-                     'runs that are to reuse the MSAs. WARNING: This will not '
-                     'check if the sequence, database or configuration have '
-                     'changed.')
-flags.DEFINE_boolean('run_relax', True, 'Whether to run the final relaxation '
-                     'step on the predicted models. Turning relax off might '
-                     'result in predictions with distracting stereochemical '
-                     'violations but might help in case you are having issues '
-                     'with the relaxation stage.')
-flags.DEFINE_boolean('use_gpu_relax', None, 'Whether to relax on GPU. '
-                     'Relax on GPU can be much faster than CPU, so it is '
-                     'recommended to enable if possible. GPUs must be available'
-                     ' if this setting is enabled.')
+                     'have been written to disk. WARNING: This will not check '
+                     'if the sequence, database or configuration have changed.')
+flags.DEFINE_integer('identity', None, 'Identity threshold.')
+flags.DEFINE_boolean('remove_seqs', False, 'Remove only sequences and not templates above identity threshold')
+flags.DEFINE_boolean('remove_templates', False, 'Remove only templates and not seqs above identity threshold')
+flags.DEFINE_boolean('remove_all',False,'Remove templates and sequences above identity threshold')
+
 
 FLAGS = flags.FLAGS
 
@@ -138,6 +137,54 @@ RELAX_ENERGY_TOLERANCE = 2.39
 RELAX_STIFFNESS = 10.0
 RELAX_EXCLUDE_RESIDUES = []
 RELAX_MAX_OUTER_ITERATIONS = 3
+
+
+def compute_identity(aligned_sequence):
+  '''
+  input_seq= input_seq.replace('-','').upper()
+  seq = seq.replace('-','').upper()
+  alignment = pairwise2.align.globalxx(input_seq, seq)
+  seq_length = min(len(input_seq), len(seq))
+  matches = alignment[0][2]
+  percent_match = (matches / seq_length) * 100
+  return percent_match'''
+  matches = len([i for i in aligned_sequence if i != '-'])
+  return (matches/len(aligned_sequence))*100
+
+def remove_msa_for_template_aligned_regions(feature_dict):
+    logging.info('Modifying feature dict.')
+    ID_TO_HHBLITS_AA = {
+        0: 'A',
+        1: 'C',  # Also U.
+        2: 'D',  # Also B.
+        3: 'E',  # Also Z.
+        4: 'F',
+        5: 'G',
+        6: 'H',
+        7: 'I',
+        8: 'K',
+        9: 'L',
+        10: 'M',
+        11: 'N',
+        12: 'P',
+        13: 'Q',
+        14: 'R',
+        15: 'S',
+        16: 'T',
+        17: 'V',
+        18: 'W',
+        19: 'Y',
+        20: 'X',  # Includes J and O.
+        21: '-',
+    }
+    for seq_id,seq in enumerate(feature_dict['msa']):
+        list_aa = [ID_TO_HHBLITS_AA[i] for i in seq]
+        aligned_sequence = ''.join([str(e) for e in list_aa])
+        similarity = compute_identity(aligned_sequence)
+        if similarity > int(FLAGS.identity):
+            feature_dict['deletion_matrix_int'][seq_id] = 0
+            feature_dict['msa'][seq_id] = 21
+    return feature_dict
 
 
 def _check_flag(flag_name: str,
@@ -160,6 +207,7 @@ def predict_structure(
     random_seed: int,
     is_prokaryote: Optional[bool] = None):
   """Predicts structure using AlphaFold for the given sequence."""
+
   logging.info('Predicting %s', fasta_name)
   timings = {}
   output_dir = os.path.join(output_dir_base, fasta_name)
@@ -174,14 +222,24 @@ def predict_structure(
   if is_prokaryote is None:
     feature_dict = data_pipeline.process(
         input_fasta_path=fasta_path,
-        msa_output_dir=msa_output_dir)
+        msa_output_dir=msa_output_dir,
+        identity=FLAGS.identity,
+        remove_seqs=FLAGS.remove_seqs,
+        remove_all=FLAGS.remove_all,
+        remove_templates=FLAGS.remove_templates
+    )
   else:
     feature_dict = data_pipeline.process(
         input_fasta_path=fasta_path,
         msa_output_dir=msa_output_dir,
-        is_prokaryote=is_prokaryote)
+        is_prokaryote=is_prokaryote,
+        identity=FLAGS.identity,
+        remove_seqs=FLAGS.remove_seqs,
+        remove_all=FLAGS.remove_all,
+        remove_templates=FLAGS.remove_templates
+    )
   timings['features'] = time.time() - t_0
-
+  #feature_dict = remove_msa_for_template_aligned_regions(feature_dict)
   # Write out features as a pickled dictionary.
   features_output_path = os.path.join(output_dir, 'features.pkl')
   with open(features_output_path, 'wb') as f:
@@ -370,7 +428,11 @@ def main(argv):
       template_searcher=template_searcher,
       template_featurizer=template_featurizer,
       use_small_bfd=use_small_bfd,
-      use_precomputed_msas=FLAGS.use_precomputed_msas)
+      use_precomputed_msas=FLAGS.use_precomputed_msas,
+      identity=FLAGS.identity,
+      remove_seqs=FLAGS.remove_seqs,
+      remove_all=FLAGS.remove_all,
+      remove_templates=FLAGS.remove_templates)
 
   if run_multimer_system:
     data_pipeline = pipeline_multimer.DataPipeline(
@@ -397,16 +459,12 @@ def main(argv):
   logging.info('Have %d models: %s', len(model_runners),
                list(model_runners.keys()))
 
-  if FLAGS.run_relax:
-    amber_relaxer = relax.AmberRelaxation(
-        max_iterations=RELAX_MAX_ITERATIONS,
-        tolerance=RELAX_ENERGY_TOLERANCE,
-        stiffness=RELAX_STIFFNESS,
-        exclude_residues=RELAX_EXCLUDE_RESIDUES,
-        max_outer_iterations=RELAX_MAX_OUTER_ITERATIONS,
-        use_gpu=FLAGS.use_gpu_relax)
-  else:
-    amber_relaxer = None
+  amber_relaxer = relax.AmberRelaxation(
+      max_iterations=RELAX_MAX_ITERATIONS,
+      tolerance=RELAX_ENERGY_TOLERANCE,
+      stiffness=RELAX_STIFFNESS,
+      exclude_residues=RELAX_EXCLUDE_RESIDUES,
+      max_outer_iterations=RELAX_MAX_OUTER_ITERATIONS)
 
   random_seed = FLAGS.random_seed
   if random_seed is None:
@@ -439,7 +497,6 @@ if __name__ == '__main__':
       'template_mmcif_dir',
       'max_template_date',
       'obsolete_pdbs_path',
-      'use_gpu_relax',
   ])
 
   app.run(main)
