@@ -18,10 +18,20 @@ import dataclasses
 import itertools
 import re
 import string
+from absl import logging
+#import Levenshtein
+from Bio import pairwise2
+from Bio.pairwise2 import format_alignment
+from Bio import AlignIO
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Set
-
-# Internal import (7716).
-
+from scipy.stats import linregress
+#import biotite
+#import biotite.sequence as seq
+#import biotite.sequence.align as align
+#from biotite.sequence.align.alignment import score
+#import biotite.sequence.io.fasta as fasta
+#import biotite.database.entrez as entrez
+#import biotite.sequence.graphics as graphics
 
 DeletionMatrix = Sequence[Sequence[int]]
 
@@ -93,8 +103,21 @@ def parse_fasta(fasta_string: str) -> Tuple[Sequence[str], Sequence[str]]:
 
   return sequences, descriptions
 
+def compute_identity(input_seq,aligned_sequence):
+  """ Computes identity percentage between input sequence and aligned sequence.
 
-def parse_stockholm(stockholm_string: str) -> Msa:
+  Args:
+    input_seq: AlphaFold2 input sequence.
+    aligned_sequence: Aligned sequence from input MSA.
+
+  Returns:
+    A float of the identity percentage between the input sequence and
+    the aligned sequence.
+  """
+  matches = len([i for i in aligned_sequence if i != '-'])
+  return (matches/len(input_seq))*100
+
+def parse_stockholm(stockholm_string: str, remove_seqs: bool, identity: int) -> Msa:
   """Parses sequences and deletion matrix from stockholm format alignment.
 
   Args:
@@ -126,35 +149,64 @@ def parse_stockholm(stockholm_string: str) -> Msa:
 
   query = ''
   keep_columns = []
-  for seq_index, sequence in enumerate(name_to_sequence.values()):
-    if seq_index == 0:
-      # Gather the columns with gaps from the query
-      query = sequence
-      keep_columns = [i for i, res in enumerate(query) if res != '-']
+  to_del = []
+  if remove_seqs:
+    # Compute alignment score for all sequences in MSA.
+    for seq_index, id in enumerate(name_to_sequence.keys()):
+      if seq_index == 0:
+        # Gather the columns with gaps from the query
+        query = name_to_sequence[id]
+        keep_columns = [i for i, res in enumerate(query) if res != '-']
 
-    # Remove the columns with gaps in the query from all sequences.
-    aligned_sequence = ''.join([sequence[c] for c in keep_columns])
+      # Remove the columns with gaps in the query from all sequences.
+      aligned_sequence = ''.join([name_to_sequence[id][c] for c in keep_columns])
+      if seq_index != 0:
+        id_percentage = compute_identity(query, name_to_sequence[id])
+        if id_percentage > identity:
+          to_del.append((seq_index, id))
+          continue
+      msa.append(aligned_sequence)
+      #Count the number of deletions w.r.t. query.
+      deletion_vec = []
+      deletion_count = 0
+      for seq_res, query_res in zip(name_to_sequence[id], query):
+        if seq_res != '-' or query_res != '-':
+          if query_res == '-':
+            deletion_count += 1
+          else:
+            deletion_vec.append(deletion_count)
+            deletion_count = 0
+      deletion_matrix.append(deletion_vec)
 
-    msa.append(aligned_sequence)
+    for index, item in to_del:
+      del name_to_sequence[item]
 
-    # Count the number of deletions w.r.t. query.
-    deletion_vec = []
-    deletion_count = 0
-    for seq_res, query_res in zip(sequence, query):
-      if seq_res != '-' or query_res != '-':
-        if query_res == '-':
-          deletion_count += 1
-        else:
-          deletion_vec.append(deletion_count)
-          deletion_count = 0
-    deletion_matrix.append(deletion_vec)
+    return Msa(sequences=msa, deletion_matrix=deletion_matrix, descriptions=list(name_to_sequence.keys()))
 
-  return Msa(sequences=msa,
-             deletion_matrix=deletion_matrix,
-             descriptions=list(name_to_sequence.keys()))
+  else:
+    for seq_index, sequence in enumerate(name_to_sequence.values()):
+      if seq_index == 0:
+        # Gather the columns with gaps from the query
+        query = sequence
+        keep_columns = [i for i, res in enumerate(query) if res != '-']
+      # Remove the columns with gaps in the query from all sequences.
+      aligned_sequence = ''.join([sequence[c] for c in keep_columns])
+      msa.append(aligned_sequence)
+      # Count the number of deletions w.r.t. query.
+      deletion_vec = []
+      deletion_count = 0
+      for seq_res, query_res in zip(sequence, query):
+        if seq_res != '-' or query_res != '-':
+          if query_res == '-':
+            deletion_count += 1
+          else:
+            deletion_vec.append(deletion_count)
+            deletion_count = 0
+      deletion_matrix.append(deletion_vec)
+    return Msa(sequences=msa, deletion_matrix=deletion_matrix, descriptions=list(name_to_sequence.keys()))
 
 
-def parse_a3m(a3m_string: str) -> Msa:
+def parse_a3m(a3m_string: str, remove_seqs: bool, identity: int) -> Msa:
   """Parses sequences and deletion matrix from a3m format alignment.
 
   Args:
@@ -172,20 +224,49 @@ def parse_a3m(a3m_string: str) -> Msa:
   """
   sequences, descriptions = parse_fasta(a3m_string)
   deletion_matrix = []
-  for msa_sequence in sequences:
-    deletion_vec = []
-    deletion_count = 0
-    for j in msa_sequence:
-      if j.islower():
-        deletion_count += 1
+  index = 0
+  to_del=[]
+  if remove_seqs:
+    for msa_sequence in sequences:
+      if index == 0:
+        input_seq = msa_sequence
       else:
-        deletion_vec.append(deletion_count)
-        deletion_count = 0
-    deletion_matrix.append(deletion_vec)
+        ratio = compute_identity(input_seq, msa_sequence)
+        logging.info('A3M: Identity between query and sequence is %d', ratio)
+        if ratio > identity:
+              to_del.append(index)
+              continue
+      deletion_vec = []
+      deletion_count = 0
+      for j in msa_sequence:
+        if j.islower():
+          deletion_count += 1
+        else:
+          deletion_vec.append(deletion_count)
+          deletion_count = 0
+      deletion_matrix.append(deletion_vec)
+      index += 1
+    for item in to_del:
+      sequences.pop(item)
+      descriptions.pop(item)
+    # Make the MSA matrix out of aligned (deletion-free) sequences.
+    deletion_table = str.maketrans('', '', string.ascii_lowercase)
+    aligned_sequences = [s.translate(deletion_table) for s in sequences]
+  else:
+    for msa_sequence in sequences:
+      deletion_vec = []
+      deletion_count = 0
+      for j in msa_sequence:
+        if j.islower():
+          deletion_count += 1
+        else:
+          deletion_vec.append(deletion_count)
+          deletion_count = 0
+      deletion_matrix.append(deletion_vec)
 
-  # Make the MSA matrix out of aligned (deletion-free) sequences.
-  deletion_table = str.maketrans('', '', string.ascii_lowercase)
-  aligned_sequences = [s.translate(deletion_table) for s in sequences]
+      # Make the MSA matrix out of aligned (deletion-free) sequences.
+    deletion_table = str.maketrans('', '', string.ascii_lowercase)
+    aligned_sequences = [s.translate(deletion_table) for s in sequences]
   return Msa(sequences=aligned_sequences,
              deletion_matrix=deletion_matrix,
              descriptions=descriptions)
@@ -274,34 +355,31 @@ def _keep_line(line: str, seqnames: Set[str]) -> bool:
     return seqname in seqnames
 
 
-def truncate_stockholm_msa(stockholm_msa_path: str, max_sequences: int) -> str:
-  """Reads + truncates a Stockholm file while preventing excessive RAM usage."""
+def truncate_stockholm_msa(stockholm_msa: str, max_sequences: int) -> str:
+  """Truncates a stockholm file to a maximum number of sequences."""
   seqnames = set()
   filtered_lines = []
+  for line in stockholm_msa.splitlines():
+    if line.strip() and not line.startswith(('#', '//')):
+      # Ignore blank lines, markup and end symbols - remainder are alignment
+      # sequence parts.
+      seqname = line.partition(' ')[0]
+      seqnames.add(seqname)
+      if len(seqnames) >= max_sequences:
+        break
 
-  with open(stockholm_msa_path) as f:
-    for line in f:
-      if line.strip() and not line.startswith(('#', '//')):
-        # Ignore blank lines, markup and end symbols - remainder are alignment
-        # sequence parts.
-        seqname = line.partition(' ')[0]
-        seqnames.add(seqname)
-        if len(seqnames) >= max_sequences:
-          break
+  for line in stockholm_msa.splitlines():
+    if _keep_line(line, seqnames):
+      filtered_lines.append(line)
 
-    f.seek(0)
-    for line in f:
-      if _keep_line(line, seqnames):
-        filtered_lines.append(line)
-
-  return ''.join(filtered_lines)
+  return '\n'.join(filtered_lines) + '\n'
 
 
 def remove_empty_columns_from_stockholm_msa(stockholm_msa: str) -> str:
   """Removes empty columns (dashes-only) from a Stockholm MSA."""
   processed_lines = {}
   unprocessed_lines = {}
-  for i, line in enumerate(stockholm_msa.splitlines()):
+  for i, line in enumerate(stockholm_msa.splitlines()[1:]):
     if line.startswith('#=GC RF'):
       reference_annotation_i = i
       reference_annotation_line = line
@@ -488,7 +566,7 @@ def _parse_hhr_hit(detailed_lines: Sequence[str]) -> TemplateHit:
   )
 
 
-def parse_hhr(hhr_string: str) -> Sequence[TemplateHit]:
+def parse_hhr(hhr_string: str, identity: int, remove_templates: bool) -> Sequence[TemplateHit]:
   """Parses the content of an entire HHR file."""
   lines = hhr_string.splitlines()
 
@@ -502,6 +580,19 @@ def parse_hhr(hhr_string: str) -> Sequence[TemplateHit]:
   if block_starts:
     block_starts.append(len(lines))  # Add the end of the final block.
     for i in range(len(block_starts) - 1):
+      if remove_templates:
+        pattern = (
+          'Probab=(.*)[\t ]*E-value=(.*)[\t ]*Score=(.*)[\t ]*Aligned_cols=(.*)[\t'
+          ' ]*Identities=(.*)%[\t ]*Similarity=(.*)[\t ]*Sum_probs=(.*)[\t '
+          ']*Template_Neff=(.*)')
+        match = re.match(pattern,lines[block_starts[i]:block_starts[i + 1]][2])
+        if match is None:
+          raise RuntimeError(
+            'Could not parse section and filter template: %s. Expected this: \n%s to contain summary.' %
+            (detailed_lines, lines[block_starts[i]:block_starts[i + 1]][2]))
+        (_, _, _, _, match_identity, _, _, _) = [float(x) for x in match.groups()]
+        if match_identity > identity:
+          continue
       hits.append(_parse_hhr_hit(lines[block_starts[i]:block_starts[i + 1]]))
   return hits
 
