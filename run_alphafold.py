@@ -220,8 +220,6 @@ flags.DEFINE_boolean(
     "recommended to enable if possible. GPUs must be available"
     " if this setting is enabled.",
 )
-flags.DEFINE_string('uniclust30_database_path', None, 'Path to the Uniclust30 '
-                    'database for use by HHblits.')
 flags.DEFINE_integer('identity', None, 'Identity threshold.')
 flags.DEFINE_boolean('remove_seqs', False, 'Remove only sequences and not templates above identity threshold')
 flags.DEFINE_boolean('remove_templates', False, 'Remove only templates and not seqs above identity threshold')
