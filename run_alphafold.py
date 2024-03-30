@@ -15,6 +15,7 @@
 """Full AlphaFold protein structure prediction script."""
 import enum
 import json
+import glob
 import os
 import pathlib
 import pickle
@@ -36,16 +37,19 @@ from alphafold.data import templates
 from alphafold.data.tools import hhsearch
 from alphafold.data.tools import hmmsearch
 from alphafold.model import config
-from alphafold.model import data
 from alphafold.model import model
 from alphafold.relax import relax
 import jax.numpy as jnp
+from Bio import pairwise2
+from Bio.pairwise2 import format_alignment
+from Bio import AlignIO
 import numpy as np
+import pandas as pd
 
+from alphafold.model import data
 # Internal import (7716).
 
 logging.set_verbosity(logging.INFO)
-
 
 @enum.unique
 class ModelsToRelax(enum.Enum):
@@ -216,6 +220,12 @@ flags.DEFINE_boolean(
     "recommended to enable if possible. GPUs must be available"
     " if this setting is enabled.",
 )
+flags.DEFINE_string('uniclust30_database_path', None, 'Path to the Uniclust30 '
+                    'database for use by HHblits.')
+flags.DEFINE_integer('identity', None, 'Identity threshold.')
+flags.DEFINE_boolean('remove_seqs', False, 'Remove only sequences and not templates above identity threshold')
+flags.DEFINE_boolean('remove_templates', False, 'Remove only templates and not seqs above identity threshold')
+flags.DEFINE_boolean('remove_all',False,'Remove templates and sequences above identity threshold')
 
 FLAGS = flags.FLAGS
 
@@ -328,7 +338,12 @@ def predict_structure(
     # Get features.
     t_0 = time.time()
     feature_dict = data_pipeline.process(
-        input_fasta_path=fasta_path, msa_output_dir=msa_output_dir
+        input_fasta_path=fasta_path,
+        msa_output_dir=msa_output_dir,
+        identity=FLAGS.identity,
+        remove_seqs=FLAGS.remove_seqs,
+        remove_all=FLAGS.remove_all,
+        remove_templates=FLAGS.remove_templates
     )
     timings["features"] = time.time() - t_0
 
@@ -593,6 +608,10 @@ def main(argv):
         template_featurizer=template_featurizer,
         use_small_bfd=use_small_bfd,
         use_precomputed_msas=FLAGS.use_precomputed_msas,
+        identity=FLAGS.identity,
+        remove_seqs=FLAGS.remove_seqs,
+        remove_all=FLAGS.remove_all,
+        remove_templates=FLAGS.remove_templates
     )
 
     if run_multimer_system:
