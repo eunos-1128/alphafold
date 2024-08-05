@@ -141,6 +141,11 @@ flags.DEFINE_boolean('use_gpu_relax', None, 'Whether to relax on GPU. '
                      'Relax on GPU can be much faster than CPU, so it is '
                      'recommended to enable if possible. GPUs must be available'
                      ' if this setting is enabled.')
+flags.DEFINE_integer('num_monomer_predictions_per_model', 1, 'How many '
+                     'predictions (each with a different random seed) will be '
+                     'generated per model. E.g. if this is 2 and there are 5 '
+                     'models then there will be 10 predictions per input. '
+                     'Note: this FLAG only applies if model_preset=monomer')
 
 FLAGS = flags.FLAGS
 
@@ -404,7 +409,7 @@ def main(argv):
         uniprot_database_path=FLAGS.uniprot_database_path,
         use_precomputed_msas=FLAGS.use_precomputed_msas)
   else:
-    num_predictions_per_model = 1
+    num_predictions_per_model = FLAGS.num_monomer_predictions_per_model
     data_pipeline = monomer_data_pipeline
 
   model_runners = {}
@@ -418,9 +423,11 @@ def main(argv):
     model_params = data.get_model_haiku_params(
         model_name=model_name, data_dir=FLAGS.data_dir)
     model_runner = model.RunModel(model_config, model_params)
-    for i in range(num_predictions_per_model):
-      model_runners[f'{model_name}_pred_{i}'] = model_runner
-
+    for i in range(num_monomer_predictions_per_model):
+        random_seed = FLAGS.random_seed + i
+        logging.info('Using random seed %d for the data pipeline', random_seed)
+        model_runners[f'{model_name}_random_seed-{random_seed}'] = model_runner
+            
   logging.info('Have %d models: %s', len(model_runners),
                list(model_runners.keys()))
 

@@ -70,6 +70,11 @@ flags.DEFINE_enum(
     ['monomer', 'monomer_casp14', 'monomer_ptm', 'multimer'],
     'Choose preset model configuration - the monomer model, the monomer model '
     'with extra ensembling, monomer model with pTM head, or multimer model')
+flags.DEFINE_integer('num_monomer_predictions_per_model', 1, 'How many '
+                     'predictions (each with a different random seed) will be '
+                     'generated per model. E.g. if this is 2 and there are 5 '
+                     'models then there will be 10 predictions per input. '
+                     'Note: this FLAG only applies if model_preset=monomer')
 flags.DEFINE_integer('num_multimer_predictions_per_model', 5, 'How many '
                      'predictions (each with a different random seed) will be '
                      'generated per model. E.g. if this is 2 and there are 5 '
