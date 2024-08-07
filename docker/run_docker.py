@@ -98,6 +98,11 @@ flags.DEFINE_string(
     'will be owned by this user:group. By default, this is the current user. '
     'Valid options are: uid or uid:gid, non-numeric values are not recognised '
     'by Docker unless that user has been created within the container.')
+flags.DEFINE_integer('random_seed', None, 'The random seed for the data '
+                     'pipeline. By default, this is randomly generated. Note '
+                     'that even if this is set, Alphafold may still not be '
+                     'deterministic, because processes like GPU inference are '
+                     'nondeterministic.')
 
 FLAGS = flags.FLAGS
 
@@ -141,7 +146,7 @@ def main(argv):
 
   # Path to the MGnify database for use by JackHMMER.
   mgnify_database_path = os.path.join(
-      FLAGS.data_dir, 'mgnify', 'mgy_clusters_2022_05.fa')
+      FLAGS.data_dir, 'mgnify_2022_05', 'mgy_clusters_2022_05.fa')
 
   # Path to the BFD database for use by HHblits.
   bfd_database_path = os.path.join(
@@ -228,9 +233,11 @@ def main(argv):
       f'--model_preset={FLAGS.model_preset}',
       f'--benchmark={FLAGS.benchmark}',
       f'--use_precomputed_msas={FLAGS.use_precomputed_msas}',
+      f'--num_monomer_predictions_per_model={FLAGS.num_monomer_predictions_per_model}',
       f'--num_multimer_predictions_per_model={FLAGS.num_multimer_predictions_per_model}',
       f'--models_to_relax={FLAGS.models_to_relax}',
       f'--use_gpu_relax={use_gpu_relax}',
+      f'--random_seed={FLAGS.random_seed}',
       '--logtostderr',
   ])
 
