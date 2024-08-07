@@ -423,7 +423,7 @@ def main(argv):
     model_params = data.get_model_haiku_params(
         model_name=model_name, data_dir=FLAGS.data_dir)
     model_runner = model.RunModel(model_config, model_params)
-    for i in range(num_monomer_predictions_per_model):
+    for i in range(num_predictions_per_model):
         random_seed = FLAGS.random_seed + i
         logging.info('Using random seed %d for the data pipeline', random_seed)
         model_runners[f'{model_name}_random_seed-{random_seed}'] = model_runner
