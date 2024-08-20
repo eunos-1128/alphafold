@@ -14,6 +14,7 @@
 
 """Docker launch script for Alphafold docker image."""
 
+import datetime as dt
 import os
 import pathlib
 import signal
@@ -24,7 +25,6 @@ from absl import flags
 from absl import logging
 import docker
 from docker import types
-
 
 flags.DEFINE_bool(
     'use_gpu', True, 'Enable NVIDIA runtime to run with GPUs.')
@@ -146,7 +146,7 @@ def main(argv):
 
   # Path to the MGnify database for use by JackHMMER.
   mgnify_database_path = os.path.join(
-      FLAGS.data_dir, 'mgnify_2022_05', 'mgy_clusters_2022_05.fa')
+      FLAGS.data_dir, 'mgnify', 'mgy_clusters_2022_05.fa')
 
   # Path to the BFD database for use by HHblits.
   bfd_database_path = os.path.join(
@@ -261,6 +261,10 @@ def main(argv):
           'TF_FORCE_UNIFIED_MEMORY': '1',
           'XLA_PYTHON_CLIENT_MEM_FRACTION': '4.0',
       })
+
+  # uniprot_id = os.path.splitext(os.path.basename(FLAGS.fasta_paths[0])) 
+  # log_filename = f'{uniprot_id}/pred_{dt.datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+  # logging.get_absl_handler().use_absl_log_file(log_filename)
 
   # Add signal handler to ensure CTRL+C also stops the running container.
   signal.signal(signal.SIGINT,
