@@ -149,7 +149,7 @@ def main(argv):
 
   # Path to the Uniref30 database for use by HHblits.
   uniref30_database_path = os.path.join(
-      FLAGS.data_dir, 'uniref30', 'UniRef30_2021_03')
+      FLAGS.data_dir, 'uniref30_2023', 'UniRef30_2023_02')
 
   # Path to the PDB70 database for use by HHsearch.
   pdb70_database_path = os.path.join(FLAGS.data_dir, 'pdb70', 'pdb70')
@@ -247,7 +247,7 @@ def main(argv):
           # The following flags allow us to make predictions on proteins that
           # would typically be too long to fit into GPU memory.
           'TF_FORCE_UNIFIED_MEMORY': '1',
-          'XLA_PYTHON_CLIENT_MEM_FRACTION': '4.0',
+          'XLA_PYTHON_CLIENT_MEM_FRACTION': '9.0',
       })
 
   # Add signal handler to ensure CTRL+C also stops the running container.
