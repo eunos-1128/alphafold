@@ -27,47 +27,43 @@ RUN apt-get update \
         cmake \
         cuda-command-line-tools-$(cut -f1,2 -d- <<< ${CUDA//./-}) \
         git \
-        hmmer \
-        kalign \
         tzdata \
         wget \
+        curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get autoremove -y \
     && apt-get clean
 
-# Compile HHsuite from source.
-RUN git clone --branch v3.3.0 https://github.com/soedinglab/hh-suite.git /tmp/hh-suite \
-    && mkdir /tmp/hh-suite/build \
-    && pushd /tmp/hh-suite/build \
-    && cmake -DCMAKE_INSTALL_PREFIX=/opt/hhsuite .. \
-    && make -j 4 && make install \
-    && ln -s /opt/hhsuite/bin/* /usr/bin \
-    && popd \
-    && rm -rf /tmp/hh-suite
+WORKDIR /opt/mamba
+RUN curl -Ls \
+    https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj bin/micromamba
 
-# Install Miniconda package manager.
-RUN wget -q -P /tmp \
-  https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
-    && bash /tmp/Miniconda3-latest-Linux-x86_64.sh -b -p /opt/conda \
-    && rm /tmp/Miniconda3-latest-Linux-x86_64.sh
+RUN mv bin/micromamba bin/mamba
+ENV PATH /opt/mamba/bin:/opt/mamba/mamba/bin:$PATH
+ENV MAMBA_ROOT_PREFIX /opt/mamba/mamba
+RUN mamba shell init -s bash -r /opt/mamba/mamba
+ENV LD_LIBRARY_PATH "/opt/mamba/mamba/lib:$LD_LIBRARY_PATH"
 
-# Install conda packages.
-ENV PATH="/opt/conda/bin:$PATH"
-RUN conda install -qy conda==4.13.0 \
-    && conda install -y -c conda-forge \
-      openmm=7.5.1 \
-      cudatoolkit==${CUDA_VERSION} \
-      pdbfixer \
-      pip \
-      python=3.8 \
-      && conda clean --all --force-pkgs-dirs --yes
+RUN mamba install -y -n base -c conda-forge -c bioconda\
+    openmm==7.5.1 \
+    cudatoolkit==${CUDA_VERSION} \
+    pdbfixer==1.7 \
+    pip \
+    python=3.8 \
+    hhsuite==3.3.0 \
+    kalign3==3.4.0 \
+    hmmer==3.4 \
+    && mamba clean --all --force-pkgs-dirs --yes
 
 COPY . /app/alphafold
+WORKDIR /app/alphafold
+RUN git checkout -f v2.3.2/model_parallel
+
 RUN wget -q -P /app/alphafold/alphafold/common/ \
   https://git.scicore.unibas.ch/schwede/openstructure/-/raw/7102c63615b64735c4941278d92b554ec94415f8/modules/mol/alg/src/stereo_chemical_props.txt
 
 # Install pip packages.
-RUN pip3 install --upgrade pip --no-cache-dir \
+RUN mamba run -n base pip3 install --upgrade pip --no-cache-dir \
     && pip3 install -r /app/alphafold/requirements.txt --no-cache-dir \
     && pip3 install --upgrade --no-cache-dir \
       jax==0.3.25 \
@@ -75,7 +71,7 @@ RUN pip3 install --upgrade pip --no-cache-dir \
       -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
 # Apply OpenMM patch.
-WORKDIR /opt/conda/lib/python3.8/site-packages
+WORKDIR /opt/mamba/mamba/lib/python3.8/site-packages
 RUN patch -p0 < /app/alphafold/docker/openmm.patch
 
 # Add SETUID bit to the ldconfig binary so that non-root users can run it.
