@@ -22,6 +22,7 @@ from alphafold.model import modules
 from alphafold.model import modules_multimer
 import haiku as hk
 import jax
+from jax.experimental import PartitionSpec, pjit
 import ml_collections
 import numpy as np
 import tensorflow.compat.v1 as tf
@@ -63,7 +64,6 @@ def get_confidence_metrics(
 
 class RunModel:
   """Container for JAX model."""
-
   def __init__(self,
                config: ml_collections.ConfigDict,
                params: Optional[Mapping[str, Mapping[str, jax.Array]]] = None):
@@ -74,20 +74,19 @@ class RunModel:
     if self.multimer_mode:
       def _forward_fn(batch):
         model = modules_multimer.AlphaFold(self.config.model)
-        return model(
-            batch,
-            is_training=False)
+        return model(batch, is_training=False)
     else:
       def _forward_fn(batch):
         model = modules.AlphaFold(self.config.model)
-        return model(
-            batch,
-            is_training=False,
-            compute_loss=False,
-            ensemble_representations=True)
+        return model(batch, is_training=False, compute_loss=False, ensemble_representations=True)
 
-    self.apply = jax.jit(hk.transform(_forward_fn).apply)
-    self.init = jax.jit(hk.transform(_forward_fn).init)
+    # Shard spec for inputs and parameters
+    param_sharding = PartitionSpec("model", "layer")
+    input_sharding = PartitionSpec("batch", None)
+
+    # Apply pjit to the forward function with sharding spec
+    self.apply = pjit(hk.transform(_forward_fn).apply, in_shardings=(param_sharding, input_sharding), out_shardings=None)
+    self.init = pjit(hk.transform(_forward_fn).init, in_shardings=(input_sharding,), out_shardings=param_sharding)
 
   def init_params(self, feat: features.FeatureDict, random_seed: int = 0):
     """Initializes the model parameters.
