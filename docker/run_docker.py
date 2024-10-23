@@ -93,8 +93,6 @@ flags.DEFINE_string(
     'will be owned by this user:group. By default, this is the current user. '
     'Valid options are: uid or uid:gid, non-numeric values are not recognised '
     'by Docker unless that user has been created within the container.')
-flags.DEFINE_string('uniref30_database_path', None, 'Path to the UniRef30 '
-                    'database for use by HHblits.')
 
 FLAGS = flags.FLAGS
 
