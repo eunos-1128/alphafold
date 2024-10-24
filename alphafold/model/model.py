@@ -23,6 +23,7 @@ from alphafold.model import modules_multimer
 import haiku as hk
 import jax
 from jax.experimental import PartitionSpec, pjit
+from jax.interpreters import pxla
 import ml_collections
 import numpy as np
 import tensorflow.compat.v1 as tf
@@ -81,7 +82,7 @@ class RunModel:
         return model(batch, is_training=False, compute_loss=False, ensemble_representations=True)
 
     # Define a mesh
-    self.mesh = jax.sharding.Mesh(devices, ("x",))  # Assuming one axis 'x', you can adjust based on your needs
+    self.mesh = pxla.Mesh(devices, ("x",))  # Assuming one axis 'x', you can adjust based on your needs
 
     # Shard spec for inputs and parameters
     param_sharding = PartitionSpec("model", "layer")
