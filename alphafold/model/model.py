@@ -80,6 +80,9 @@ class RunModel:
         model = modules.AlphaFold(self.config.model)
         return model(batch, is_training=False, compute_loss=False, ensemble_representations=True)
 
+    # Define a mesh
+    self.mesh = jax.sharding.Mesh(devices, ("x",))  # Assuming one axis 'x', you can adjust based on your needs
+
     # Shard spec for inputs and parameters
     param_sharding = PartitionSpec("model", "layer")
     input_sharding = PartitionSpec("batch", None)
