@@ -82,11 +82,11 @@ class RunModel:
         return model(batch, is_training=False, compute_loss=False, ensemble_representations=True)
 
     # Define a mesh
-    self.mesh = pxla.Mesh(jax.devices(), ("x",))  # Assuming one axis 'x', you can adjust based on your needs
+    self.mesh = pxla.Mesh(jax.devices(), ('model', 'layer'))
 
     # Shard spec for inputs and parameters
-    param_sharding = PartitionSpec("model", "layer")
-    input_sharding = PartitionSpec("batch", None)
+    param_sharding = PartitionSpec('model', 'layer')
+    input_sharding = PartitionSpec('batch', None)
 
     # Apply pjit to the forward function with sharding spec
     self.apply = pjit.pjit(hk.transform(_forward_fn).apply, in_axis_resources=(param_sharding, input_sharding), out_axis_resources=None)
