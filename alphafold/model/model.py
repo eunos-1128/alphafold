@@ -86,11 +86,11 @@ class RunModel:
 
     # Shard spec for inputs and parameters
     param_sharding = PartitionSpec('model')
-    input_sharding = PartitionSpec(None)
+    input_sharding = (PartitionSpec(None), PartitionSpec(None), PartitionSpec(None))
 
     # Apply pjit to the forward function with sharding spec
-    self.apply = pjit.pjit(hk.transform(_forward_fn).apply, in_axis_resources=(input_sharding,), out_axis_resources=param_sharding)
-    self.init = pjit.pjit(hk.transform(_forward_fn).init, in_axis_resources=(input_sharding,), out_axis_resources=param_sharding)
+    self.apply = pjit.pjit(hk.transform(_forward_fn).apply, in_axis_resources=input_sharding, out_axis_resources=param_sharding)
+    self.init = pjit.pjit(hk.transform(_forward_fn).init, in_axis_resources=input_sharding, out_axis_resources=param_sharding)
 
   def init_params(self, feat: features.FeatureDict, random_seed: int = 0):
     """Initializes the model parameters.
